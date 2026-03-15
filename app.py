@@ -34,59 +34,28 @@ def callback():
     except InvalidSignatureError:
         abort(400)
 
-    return "OK"
+    return 'OK'
 
 
 # ===== MESSAGE EVENT =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
-    text = event.message.text.lower().strip()
+    text = event.message.text.lower()
 
     # ===== BTC PRICE =====
     if text == "btc":
 
         try:
-
             url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-            data = requests.get(url).json()
+            response = requests.get(url, timeout=10)
+            data = response.json()
 
             price = data["bitcoin"]["usd"]
 
-            flex_message = {
-                "type": "bubble",
-                "body": {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "BTC PRICE",
-                            "weight": "bold",
-                            "size": "xl"
-                        },
-                        {
-                            "type": "text",
-                            "text": f"${price}",
-                            "size": "lg",
-                            "color": "#00AA00"
-                        },
-                        {
-                            "type": "text",
-                            "text": "Real-time Bitcoin price",
-                            "size": "sm",
-                            "color": "#999999"
-                        }
-                    ]
-                }
-            }
-
             line_bot_api.reply_message(
                 event.reply_token,
-                FlexSendMessage(
-                    alt_text="BTC Price",
-                    contents=flex_message
-                )
+                TextSendMessage(text=f"BTC Price: ${price}")
             )
 
         except Exception as e:
@@ -96,23 +65,76 @@ def handle_message(event):
                 TextSendMessage(text="Error getting BTC price")
             )
 
+        return
 
-    # ===== HELP MENU =====
-    else:
 
-        reply = """
-BTC Trading Bot
+    # ===== PREDICT =====
+    if text == "predict":
 
-Commands
-btc → BTC price
-predict → prediction
-signal → trading signal
-"""
+        try:
 
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply)
+            response = requests.get(
+                "https://btc-algorithms.onrender.com/predict",
+                timeout=10
+            )
+
+            data = response.json()
+            prediction = data["prediction"]
+
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"BTC Predicted Price\n${prediction}"
+                )
+            )
+
+        except:
+
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="Prediction API error")
+            )
+
+        return
+
+
+    # ===== SIGNAL =====
+    if text == "signal":
+
+        try:
+
+            response = requests.get(
+                "https://btc-algorithms.onrender.com/signal",
+                timeout=10
+            )
+
+            data = response.json()
+            signal = data["signal"]
+
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"Trading Signal: {signal}"
+                )
+            )
+
+        except:
+
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="Signal API error")
+            )
+
+        return
+
+
+    # ===== DEFAULT =====
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(
+            text="Commands:\nbtc\npredict\nsignal"
         )
+    )
 
 
 # ===== RUN SERVER =====
