@@ -15,53 +15,46 @@ from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# LINE credentials
 CHANNEL_ACCESS_TOKEN = os.getenv("CHANNEL_ACCESS_TOKEN")
 CHANNEL_SECRET = os.getenv("CHANNEL_SECRET")
 
 line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
+# ===== API =====
+def get_btc():
 
-# ===== HOME =====
-@app.route("/")
-def home():
-    return "LINE Trading Bot Running"
-
-
-# ===== BTC API =====
-def get_btc_data():
+    url = "https://btc-algorithms.onrender.com/predict"
 
     try:
-
-        url = "https://btc-algorithms.onrender.com/predict"
 
         r = requests.get(url,timeout=10)
         data = r.json()
 
-        price = data.get("last_close","N/A")
-        predict = data.get("predicted_close","N/A")
-        change = data.get("predicted_change_pct","N/A")
+        price = data["last_close"]
+        predict = data["predicted_close"]
+        change = data["predicted_change_pct"]
 
         signal = "HOLD"
 
-        if isinstance(change,(int,float)):
-            if change > 1:
-                signal = "BUY"
-            elif change < -1:
-                signal = "SELL"
+        if change > 1:
+            signal = "BUY"
+        elif change < -1:
+            signal = "SELL"
 
         return price,predict,change,signal
 
     except Exception as e:
 
-        print("API ERROR",e)
+        print("API ERROR:",e)
 
-        return "N/A","N/A","N/A","HOLD"
+        return None,None,None,None
 
 
-# ===== FLEX DASHBOARD =====
-def btc_dashboard(price,predict,change,signal):
+# ===== BTC DASHBOARD =====
+def handle_btc(event):
+
+    price,predict,change,signal = get_btc()
 
     now = datetime.now().strftime("%d %b %Y | %H:%M")
 
@@ -85,7 +78,7 @@ def btc_dashboard(price,predict,change,signal):
             "type": "text",
             "text": f"Updated: {now}",
             "size": "sm",
-            "color": "#888888"
+            "color": "#999999"
           },
 
           {
@@ -122,9 +115,89 @@ def btc_dashboard(price,predict,change,signal):
       }
     }
 
-    return FlexSendMessage(
-        alt_text="BTC Dashboard",
-        contents=bubble
+    line_bot_api.reply_message(
+        event.reply_token,
+        FlexSendMessage(
+            alt_text="BTC Dashboard",
+            contents=bubble
+        )
+    )
+
+
+# ===== SIGNAL =====
+def handle_signal(event):
+
+    price,predict,change,signal = get_btc()
+
+    msg = f"""
+BTC Signal
+
+Price: ${price}
+Prediction: ${predict}
+
+Change: {change} %
+
+Signal: {signal}
+
+BUY → แนวโน้มขึ้น
+SELL → แนวโน้มลง
+HOLD → รอดูสถานการณ์
+"""
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=msg)
+    )
+
+
+# ===== CHART =====
+def handle_chart(event):
+
+    chart_url = "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6'],datasets:[{label:'BTC',data:[65000,66000,65500,67000,69000,71000]}]}}"
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        ImageSendMessage(
+            original_content_url=chart_url,
+            preview_image_url=chart_url
+        )
+    )
+
+
+# ===== BITCOIN INFO =====
+def handle_bitcoin(event):
+
+    msg = """
+Bitcoin คือ Cryptocurrency
+
+ใช้ Blockchain
+ไม่มีธนาคารกลาง
+มีจำนวนจำกัด 21 ล้านเหรียญ
+"""
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=msg)
+    )
+
+
+# ===== HELP =====
+def handle_help(event):
+
+    msg = """
+BTC AI Bot
+
+Commands
+
+btc → dashboard
+signal → trading signal
+chart → btc chart
+bitcoin → about bitcoin
+"""
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=msg)
     )
 
 
@@ -141,117 +214,32 @@ def callback():
     except InvalidSignatureError:
         abort(400)
 
-    except Exception as e:
-        print("Webhook error:", e)
-
     return "OK"
 
 
-# ===== MESSAGE EVENT =====
+# ===== MESSAGE ROUTER =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
     text = event.message.text.lower()
 
-    price,predict,change,signal = get_btc_data()
-
-
-    # ===== DASHBOARD =====
     if text == "btc":
+        handle_btc(event)
 
-        flex = btc_dashboard(price,predict,change,signal)
+    elif text == "signal":
+        handle_signal(event)
 
-        line_bot_api.reply_message(
-            event.reply_token,
-            flex
-        )
+    elif text == "chart":
+        handle_chart(event)
 
-        return
+    elif text == "bitcoin":
+        handle_bitcoin(event)
 
-
-    # ===== SIGNAL =====
-    if text == "signal":
-
-        msg = f"""
-BTC Trading Signal
-
-Price: ${price}
-Prediction: ${predict}
-
-Change: {change} %
-
-Signal: {signal}
-
-Guide
-BUY → แนวโน้มขึ้น
-SELL → แนวโน้มลง
-HOLD → รอดูสถานการณ์
-"""
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=msg)
-        )
-
-        return
+    else:
+        handle_help(event)
 
 
-    # ===== BTC CHART =====
-    if text == "chart":
-
-        chart_url = "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6'],datasets:[{label:'BTC',data:[65000,66000,65500,67000,69000,71000]}]}}"
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            ImageSendMessage(
-                original_content_url=chart_url,
-                preview_image_url=chart_url
-            )
-        )
-
-        return
-
-
-    # ===== Q&A BITCOIN =====
-    if "bitcoin" in text:
-
-        reply = """
-Bitcoin คือ Cryptocurrency
-
-ใช้เทคโนโลยี Blockchain
-ไม่มีธนาคารกลาง
-มีจำนวนจำกัด 21 ล้านเหรียญ
-
-ถูกใช้เป็นสินทรัพย์ลงทุน
-"""
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply)
-        )
-
-        return
-
-
-    # ===== HELP =====
-    reply = """
-BTC AI Bot
-
-Commands
-
-btc → dashboard
-signal → trading signal
-chart → btc chart
-bitcoin → about bitcoin
-"""
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=reply)
-    )
-
-
-# ===== RUN SERVER =====
+# ===== RUN =====
 if __name__ == "__main__":
 
     port = int(os.environ.get("PORT",5000))
