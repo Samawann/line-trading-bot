@@ -8,25 +8,48 @@ from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# ===== LINE TOKEN =====
-CHANNEL_ACCESS_TOKEN = os.getenv("CHANNEL_ACCESS_TOKEN")
-CHANNEL_SECRET = os.getenv("CHANNEL_SECRET")
+CHANNEL_ACCESS_TOKEN = "YOUR_CHANNEL_ACCESS_TOKEN"
+CHANNEL_SECRET = "YOUR_CHANNEL_SECRET"
 
 line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
+API_BASE = "https://btc-algorithms.onrender.com"
 
-# ===== HOME =====
-@app.route("/")
-def home():
-    return "BTC AI Trading Bot Running"
+
+# ===== GET BTC DATA FROM YOUR API =====
+def get_prediction():
+
+    try:
+        r = requests.get(f"{API_BASE}/predict")
+        data = r.json()
+
+        price = data.get("current_price")
+        prediction = data.get("prediction")
+
+        return price, prediction
+
+    except:
+        return None, None
+
+
+def get_signal():
+
+    try:
+        r = requests.get(f"{API_BASE}/signal")
+        data = r.json()
+
+        return data.get("signal")
+
+    except:
+        return None
 
 
 # ===== WEBHOOK =====
 @app.route("/callback", methods=['POST'])
 def callback():
 
-    signature = request.headers.get('X-Line-Signature')
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
 
     try:
@@ -37,44 +60,25 @@ def callback():
     return "OK"
 
 
-# ===== MESSAGE EVENT =====
+# ===== LINE BOT =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
-    text = event.message.text.lower().strip()
-
+    text = event.message.text.lower()
 
     # ===== DASHBOARD =====
     if text == "btc":
 
-        try:
+        price, prediction = get_prediction()
+        signal = get_signal()
 
-            predict_api = requests.get(
-                "https://btc-algorithms.onrender.com/predict-price",
-                timeout=10
-            ).json()
-
-            signal_api = requests.get(
-                "https://btc-algorithms.onrender.com/trading-signal",
-                timeout=10
-            ).json()
-
-            volatility_api = requests.get(
-                "https://btc-algorithms.onrender.com/volatility",
-                timeout=10
-            ).json()
-
-            price = predict_api.get("current_price", "N/A")
-            prediction = predict_api.get("predicted_price", "N/A")
-            signal = signal_api.get("signal", "N/A")
-            volatility = volatility_api.get("volatility", "N/A")
-
-        except Exception as e:
-
-            print(e)
-
+        if price is None:
             price = "N/A"
+
+        if prediction is None:
             prediction = "N/A"
+
+        if signal is None:
             signal = "N/A"
             volatility = "N/A"
 
@@ -107,13 +111,13 @@ def handle_message(event):
                     {
                         "type": "text",
                         "text": f"Prediction: ${prediction}",
-                        "size": "lg"
+                        "size": "md"
                     },
 
                     {
                         "type": "text",
                         "text": f"Signal: {signal}",
-                        "size": "lg",
+                        "size": "md",
                         "color": "#00AA00"
                     },
 
@@ -135,110 +139,43 @@ def handle_message(event):
             )
         )
 
-        return
 
+    elif text == "signal":
 
-    # ===== PREDICT =====
-    if text == "predict":
-
-        try:
-
-            data = requests.get(
-                "https://btc-algorithms.onrender.com/predict-price"
-            ).json()
-
-            price = data.get("predicted_price")
-
-            reply = f"Predicted BTC Price\n${price}"
-
-        except:
-
-            reply = "Prediction API error"
-
+        signal = get_signal()
 
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=reply)
+            TextSendMessage(text=f"Trading Signal: {signal}")
         )
 
         return
 
 
-    # ===== SIGNAL =====
-    if text == "signal":
+    elif text == "predict":
 
-        try:
-
-            data = requests.get(
-                "https://btc-algorithms.onrender.com/trading-signal"
-            ).json()
-
-            signal = data.get("signal")
-
-            reply = f"Trading Signal: {signal}"
-
-        except:
-
-            reply = "Signal API error"
-
+        price, prediction = get_prediction()
 
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=reply)
+            TextSendMessage(
+                text=f"Current Price: {price}\nPrediction: {prediction}"
+            )
         )
 
-        return
 
-
-    # ===== VOLATILITY =====
-    if text == "volatility":
-
-        try:
-
-            data = requests.get(
-                "https://btc-algorithms.onrender.com/volatility"
-            ).json()
-
-            vol = data.get("volatility")
-
-            reply = f"BTC Volatility: {vol}"
-
-        except:
-
-            reply = "Volatility API error"
-
+    else:
 
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=reply)
+            TextSendMessage(
+                text="พิมพ์ btc เพื่อดู BTC Dashboard"
+            )
         )
-
-        return
-
-
-    # ===== HELP =====
-    help_text = """
-BTC AI Trading Bot
-
-Commands
-btc → dashboard
-predict → price prediction
-signal → trading signal
-volatility → volatility
-"""
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=help_text)
-    )
 
 
 # ===== RUN SERVER =====
 if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    app.run(host="0.0.0.0", port=port)
