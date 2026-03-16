@@ -17,22 +17,24 @@ handler = WebhookHandler(CHANNEL_SECRET)
 API_BASE = "https://btc-algorithms.onrender.com"
 
 
-# ===== GET BTC DATA FROM YOUR API =====
+# ===== GET BTC PREDICTION =====
 def get_prediction():
 
     try:
         r = requests.get(f"{API_BASE}/predict")
         data = r.json()
 
-        price = data.get("current_price")
-        prediction = data.get("prediction")
+        price = data.get("last_close")
+        prediction = data.get("predicted_close")
+        change = data.get("predicted_change_pct")
 
-        return price, prediction
+        return price, prediction, change
 
     except:
-        return None, None
+        return None, None, None
 
 
+# ===== GET SIGNAL =====
 def get_signal():
 
     try:
@@ -69,19 +71,17 @@ def handle_message(event):
     # ===== DASHBOARD =====
     if text == "btc":
 
-        price, prediction = get_prediction()
+        price, prediction, change = get_prediction()
         signal = get_signal()
 
-        if price is None:
-            price = "N/A"
+        if price:
+            price = f"${price:,.2f}"
 
-        if prediction is None:
-            prediction = "N/A"
+        if prediction:
+            prediction = f"${prediction:,.2f}"
 
-        if signal is None:
-            signal = "N/A"
-            volatility = "N/A"
-
+        if change:
+            change = f"{change:.2f}%"
 
         flex = {
             "type": "bubble",
@@ -99,25 +99,28 @@ def handle_message(event):
                     },
 
                     {
-                        "type": "separator"
-                    },
-
-                    {
                         "type": "text",
-                        "text": f"Price: ${price}",
+                        "text": f"Price: {price}",
                         "size": "lg"
                     },
 
                     {
                         "type": "text",
-                        "text": f"Prediction: ${prediction}",
+                        "text": f"Prediction: {prediction}",
+                        "size": "md"
+                    },
+
+                    {
+                        "type": "text",
+                        "text": f"Predicted Change: {change}",
                         "size": "md"
                     },
 
                     {
                         "type": "text",
                         "text": f"Signal: {signal}",
-                        "size": "md",
+                        "size": "lg",
+                        "weight": "bold",
                         "color": "#00AA00"
                     },
 
@@ -137,6 +140,24 @@ def handle_message(event):
                 alt_text="BTC Dashboard",
                 contents=flex
             )
+        )
+
+
+    elif text == "predict":
+
+        price, prediction, change = get_prediction()
+
+        msg = f"""
+BTC Prediction
+
+Current Price: {price}
+Predicted Price: {prediction}
+Change: {change}
+"""
+
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=msg)
         )
 
 
