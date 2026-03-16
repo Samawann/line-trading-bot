@@ -1,68 +1,83 @@
-from flask import Flask, request, abort
+from flask import Flask, request
 import requests
 import os
 
 from linebot import LineBotApi, WebhookHandler
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-CHANNEL_ACCESS_TOKEN = "YOUR_CHANNEL_ACCESS_TOKEN"
-CHANNEL_SECRET = "YOUR_CHANNEL_SECRET"
+# LINE credentials
+CHANNEL_ACCESS_TOKEN = os.getenv("CHANNEL_ACCESS_TOKEN")
+CHANNEL_SECRET = os.getenv("CHANNEL_SECRET")
 
 line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
 API_BASE = "https://btc-algorithms.onrender.com"
 
+# ===== BTC API =====
+def get_btc_prediction():
 
-# ===== GET BTC PREDICTION =====
-def get_prediction():
-
-    try:
-        r = requests.get(f"{API_BASE}/predict")
-        data = r.json()
-
-        price = data.get("last_close")
-        prediction = data.get("predicted_close")
-        change = data.get("predicted_change_pct")
-
-        return price, prediction, change
-
-    except:
-        return None, None, None
-
-
-# ===== GET SIGNAL =====
-def get_signal():
+    url = "https://btc-algorithms.onrender.com/predict"
 
     try:
-        r = requests.get(f"{API_BASE}/signal")
+        r = requests.get(url)
         data = r.json()
 
-        return data.get("signal")
+        last_price = data["last_close"]
+        predicted_price = data["predicted_close"]
+        change = data["predicted_change_pct"]
 
-    except:
-        return None
+        if change > 1:
+            signal = "BUY"
+        elif change < -1:
+            signal = "SELL"
+        else:
+            signal = "HOLD"
+
+        msg = f"""
+📊 BTC Dashboard
+
+💰 Current Price
+${last_price:,.2f}
+
+🔮 Predicted Price
+${predicted_price:,.2f}
+
+📉 Change
+{change:.2f} %
+
+📢 Signal
+{signal}
+"""
+
+        return msg
+
+    except Exception as e:
+        print("API error:", e)
+        return "Error getting BTC prediction"
 
 
-# ===== WEBHOOK =====
+# ===== LINE WEBHOOK =====
 @app.route("/callback", methods=['POST'])
 def callback():
 
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
-        abort(400)
+        return "Invalid signature", 400
+    except Exception as e:
+        print("Webhook error:", e)
 
-    return "OK"
+    return 'OK'
 
 
-# ===== LINE BOT =====
+# ===== MESSAGE HANDLER =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
@@ -70,129 +85,27 @@ def handle_message(event):
 
     # ===== DASHBOARD =====
     if text == "btc":
+        reply = get_btc_prediction()
 
-        price, prediction, change = get_prediction()
-        signal = get_signal()
-
-        if price:
-            price = f"${price:,.2f}"
-
-        if prediction:
-            prediction = f"${prediction:,.2f}"
-
-        if change:
-            change = f"{change:.2f}%"
-
-        flex = {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "spacing": "md",
-                "contents": [
-
-                    {
-                        "type": "text",
-                        "text": "BTC Trading Dashboard",
-                        "weight": "bold",
-                        "size": "xl"
-                    },
-
-                    {
-                        "type": "text",
-                        "text": f"Price: {price}",
-                        "size": "lg"
-                    },
-
-                    {
-                        "type": "text",
-                        "text": f"Prediction: {prediction}",
-                        "size": "md"
-                    },
-
-                    {
-                        "type": "text",
-                        "text": f"Predicted Change: {change}",
-                        "size": "md"
-                    },
-
-                    {
-                        "type": "text",
-                        "text": f"Signal: {signal}",
-                        "size": "lg",
-                        "weight": "bold",
-                        "color": "#00AA00"
-                    },
-
-                    {
-                        "type": "text",
-                        "text": f"Volatility: {volatility}",
-                        "size": "lg"
-                    }
-
-                ]
-            }
-        }
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            FlexSendMessage(
-                alt_text="BTC Dashboard",
-                contents=flex
-            )
-        )
-
+    elif text == "price":
+        reply = get_btc_prediction()
 
     elif text == "predict":
-
-        price, prediction, change = get_prediction()
-
-        msg = f"""
-BTC Prediction
-
-Current Price: {price}
-Predicted Price: {prediction}
-Change: {change}
-"""
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=msg)
-        )
-
-
-    elif text == "signal":
-
-        signal = get_signal()
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=f"Trading Signal: {signal}")
-        )
-
-        return
-
-
-    elif text == "predict":
-
-        price, prediction = get_prediction()
-
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(
-                text=f"Current Price: {price}\nPrediction: {prediction}"
-            )
-        )
-
+        reply = get_btc_prediction()
 
     else:
+        reply = """
+Commands
 
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(
-                text="พิมพ์ btc เพื่อดู BTC Dashboard"
-            )
-        )
+btc → BTC dashboard
+price → current + prediction
+predict → BTC forecast
+"""
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply)
+    )
 
 
 # ===== RUN SERVER =====
