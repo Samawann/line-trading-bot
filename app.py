@@ -3,7 +3,7 @@ import requests
 import os
 
 from linebot import LineBotApi, WebhookHandler
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
+from linebot.models import MessageEvent, TextMessage, FlexSendMessage
 from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
@@ -19,7 +19,7 @@ handler = WebhookHandler(CHANNEL_SECRET)
 # ===== HOME =====
 @app.route("/")
 def home():
-    return "LINE Trading Bot Running"
+    return "LINE BTC AI Bot Running"
 
 
 # ===== WEBHOOK =====
@@ -34,66 +34,134 @@ def callback():
     except InvalidSignatureError:
         abort(400)
 
-    return 'OK'
+    return "OK"
 
 
 # ===== MESSAGE EVENT =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
-    text = event.message.text.lower()
+    text = event.message.text.lower().strip()
 
-    # ===== BTC PRICE =====
-    if text == "btc":
+    # ===== BTC DASHBOARD =====
+    if text == "btc":   
 
         try:
-            url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-            response = requests.get(url, timeout=10)
-            data = response.json()
 
-            price = data["bitcoin"]["usd"]
+            price = requests.get(
+                "https://btc-algorithms.onrender.com/btc"
+            ).json()["price"]
 
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=f"BTC Price: ${price}")
+            prediction = requests.get(
+                "https://btc-algorithms.onrender.com/predict"
+            ).json()["prediction"]
+
+            signal = requests.get(
+                "https://btc-algorithms.onrender.com/signal"
+            ).json()["signal"]
+
+        except:
+
+            price = "N/A"
+            prediction = "N/A"
+            signal = "N/A"
+
+        flex = {
+            "type": "bubble",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+
+                    {
+                        "type": "text",
+                        "text": "BTC Trading Dashboard",
+                        "weight": "bold",
+                        "size": "xl"
+                    },
+
+                    {
+                        "type": "separator"
+                    },
+
+                    {
+                        "type": "text",
+                        "text": f"Price: ${price}",
+                        "size": "lg"
+                    },
+
+                    {
+                        "type": "text",
+                        "text": f"Prediction: ${prediction}",
+                        "size": "lg"
+                    },
+
+                    {
+                        "type": "text",
+                        "text": f"Signal: {signal}",
+                        "size": "lg",
+                        "color": "#00AA00"
+                    }
+
+                ]
+            }
+        }
+
+        line_bot_api.reply_message(
+            event.reply_token,
+            FlexSendMessage(
+                alt_text="BTC Dashboard",
+                contents=flex
             )
-
-        except Exception as e:
-
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Error getting BTC price")
-            )
+        )
 
         return
 
 
-    # ===== PREDICT =====
+    # ===== PREDICTION =====
     if text == "predict":
 
         try:
 
-            response = requests.get(
-                "https://btc-algorithms.onrender.com/predict",
-                timeout=10
-            )
+            data = requests.get(
+                "https://btc-algorithms.onrender.com/predict"
+            ).json()
 
-            data = response.json()
             prediction = data["prediction"]
 
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"BTC Predicted Price\n${prediction}"
-                )
-            )
+            reply = f"Predicted BTC Price\n${prediction}"
 
         except:
 
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Prediction API error")
+            reply = "Prediction API error"
+
+        line_bot_api.reply_message(
+            event.reply_token,
+            FlexSendMessage(
+                alt_text="Prediction",
+                contents={
+                    "type": "bubble",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "BTC Prediction",
+                                "weight": "bold",
+                                "size": "xl"
+                            },
+                            {
+                                "type": "text",
+                                "text": f"${prediction}",
+                                "size": "lg"
+                            }
+                        ]
+                    }
+                }
             )
+        )
 
         return
 
@@ -103,12 +171,10 @@ def handle_message(event):
 
         try:
 
-            response = requests.get(
-                "https://btc-algorithms.onrender.com/signal",
-                timeout=10
-            )
+            data = requests.get(
+                "https://btc-algorithms.onrender.com/signal"
+            ).json()
 
-            data = response.json()
             signal = data["signal"]
 
             line_bot_api.reply_message(
@@ -120,24 +186,86 @@ def handle_message(event):
 
         except:
 
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Signal API error")
+            signal = "API Error"
+
+        flex = {
+            "type": "bubble",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+
+                    {
+                        "type": "text",
+                        "text": "Trading Signal",
+                        "weight": "bold",
+                        "size": "xl"
+                    },
+
+                    {
+                        "type": "text",
+                        "text": signal,
+                        "size": "xxl",
+                        "color": "#FF0000"
+                    }
+
+                ]
+            }
+        }
+
+        line_bot_api.reply_message(
+            event.reply_token,
+            FlexSendMessage(
+                alt_text="Trading Signal",
+                contents=flex
             )
+        )
 
         return
 
 
-    # ===== DEFAULT =====
+    # ===== HELP =====
+    help_text = """
+BTC AI Trading Bot
+
+Commands
+btc → Trading dashboard
+predict → price prediction
+signal → buy/sell signal
+"""
+
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(
-            text="Commands:\nbtc\npredict\nsignal"
+        FlexSendMessage(
+            alt_text="Help",
+            contents={
+                "type": "bubble",
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "Bot Commands",
+                            "weight": "bold",
+                            "size": "xl"
+                        },
+                        {
+                            "type": "text",
+                            "text": help_text
+                        }
+                    ]
+                }
+            }
         )
     )
 
 
-# ===== RUN SERVER =====
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
