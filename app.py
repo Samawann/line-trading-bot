@@ -27,7 +27,8 @@ def get_btc():
     url = "https://btc-algorithms.onrender.com/predict"
 
     try:
-        r = requests.get(url, timeout=10)
+
+        r = requests.get(url,timeout=10)
         data = r.json()
 
         price = data["last_close"]
@@ -41,17 +42,20 @@ def get_btc():
         elif change < -1:
             signal = "SELL"
 
-        return price, predict, change, signal
+        return price,predict,change,signal
 
     except Exception as e:
-        print("API ERROR:", e)
-        return None, None, None, None
+
+        print("API ERROR:",e)
+
+        return None,None,None,None
 
 
-# ===== BTC DASHBOARD (เดิม) =====
+# ===== BTC DASHBOARD =====
 def handle_btc(event):
 
-    price, predict, change, signal = get_btc()
+    price,predict,change,signal = get_btc()
+
     now = datetime.now().strftime("%d %b %Y | %H:%M")
 
     bubble = {
@@ -69,31 +73,37 @@ def handle_btc(event):
             "size": "xl",
             "color": "#F7931A"
           },
+
           {
             "type": "text",
             "text": f"Updated: {now}",
             "size": "sm",
             "color": "#999999"
           },
+
           {
             "type": "separator",
             "margin": "md"
           },
+
           {
             "type": "text",
             "text": f"💰 Price: ${price}",
             "size": "lg"
           },
+
           {
             "type": "text",
             "text": f"🔮 Prediction: ${predict}",
             "size": "md"
           },
+
           {
             "type": "text",
             "text": f"📉 Change: {change} %",
             "size": "md"
           },
+
           {
             "type": "text",
             "text": f"📊 Signal: {signal}",
@@ -114,10 +124,10 @@ def handle_btc(event):
     )
 
 
-# ===== SIGNAL (เดิม) =====
+# ===== SIGNAL =====
 def handle_signal(event):
 
-    price, predict, change, signal = get_btc()
+    price,predict,change,signal = get_btc()
 
     msg = f"""
 BTC Signal
@@ -140,7 +150,7 @@ HOLD → รอดูสถานการณ์
     )
 
 
-# ===== CHART (เดิม) =====
+# ===== CHART =====
 def handle_chart(event):
 
     chart_url = "https://quickchart.io/chart?c={type:'line',data:{labels:['1','2','3','4','5','6'],datasets:[{label:'BTC',data:[65000,66000,65500,67000,69000,71000]}]}}"
@@ -154,7 +164,7 @@ def handle_chart(event):
     )
 
 
-# ===== BITCOIN INFO (เดิม) =====
+# ===== BITCOIN INFO =====
 def handle_bitcoin(event):
 
     msg = """
@@ -171,54 +181,7 @@ Bitcoin คือ Cryptocurrency
     )
 
 
-# ===== 🆕 แยกคำสั่ง =====
-def handle_price(event):
-    price, _, _, _ = get_btc()
-    msg = f"💰 BTC Price: ${price}"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=msg)
-    )
-
-
-def handle_predict(event):
-    _, predict, _, _ = get_btc()
-    msg = f"🔮 BTC Prediction: ${predict}"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=msg)
-    )
-
-
-def handle_change(event):
-    _, _, change, _ = get_btc()
-    msg = f"📉 BTC Change: {change} %"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=msg)
-    )
-
-
-def handle_signal_only(event):
-    _, _, _, signal = get_btc()
-
-    msg = f"""📊 BTC Signal: {signal}
-
-BUY → ขึ้น
-SELL → ลง
-HOLD → รอดู
-"""
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=msg)
-    )
-
-
-# ===== HELP (อัปเดต) =====
+# ===== HELP =====
 def handle_help(event):
 
     msg = """
@@ -227,12 +190,8 @@ BTC AI Bot
 Commands
 
 btc → dashboard
-signal → full signal
-price → ราคา BTC
-predict → ราคาคาดการณ์
-change → % เปลี่ยน
-signalonly → BUY/SELL
-chart → กราฟ
+signal → trading signal
+chart → btc chart
 bitcoin → about bitcoin
 """
 
@@ -251,13 +210,14 @@ def callback():
 
     try:
         handler.handle(body, signature)
+
     except InvalidSignatureError:
         abort(400)
 
     return "OK"
 
 
-# ===== ROUTER (อัปเดต) =====
+# ===== MESSAGE ROUTER =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
 
@@ -275,18 +235,6 @@ def handle_message(event):
     elif text == "bitcoin":
         handle_bitcoin(event)
 
-    elif text == "price":
-        handle_price(event)
-
-    elif text == "predict":
-        handle_predict(event)
-
-    elif text == "change":
-        handle_change(event)
-
-    elif text == "signalonly":
-        handle_signal_only(event)
-
     else:
         handle_help(event)
 
@@ -294,5 +242,6 @@ def handle_message(event):
 # ===== RUN =====
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT",5000))
+
+    app.run(host="0.0.0.0",port=port)
